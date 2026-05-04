@@ -1,0 +1,8 @@
+weather_data:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "md:global-weather-data?motherduck_token={{ env_var('MOTHERDUCK_TOKEN') }}"
+      schema: main
+      threads: 4

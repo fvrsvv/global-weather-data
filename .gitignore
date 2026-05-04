@@ -1,1 +1,7 @@
 .env
+/.venv
+
+/airflow/dags/.cache.sqlite
+/airflow/dags/__pycache__/
+
+/weather_data/secrets.toml

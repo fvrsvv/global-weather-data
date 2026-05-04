@@ -22,10 +22,21 @@ CITIES = [
 ]
 
 HOURLY_VARIABLES = [
-    "temperature_2m", "relative_humidity_2m", "dew_point_2m", "apparent_temperature",
-    "precipitation_probability", "precipitation", "rain", "showers", "snowfall", "snow_depth",
-    "weather_code", "pressure_msl", "surface_pressure", "cloud_cover", "cloud_cover_low",
-    "visibility", "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "surface_temperature"
+    "temperature_2m",
+    "relative_humidity_2m",
+    "apparent_temperature",
+    "is_day",
+    "wind_speed_10m",
+    "wind_direction_10m",
+    "wind_gusts_10m",
+    "snowfall",
+    "showers",
+    "rain",
+    "precipitation",
+    "weather_code",
+    "cloud_cover",
+    "pressure_msl",
+    "surface_pressure"
 ]
 
 # ==================== dlt RESOURCE ====================
