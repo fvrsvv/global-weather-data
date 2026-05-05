@@ -1,4 +1,4 @@
-#!/Users/elizavetafavarisova/Documents/projects/global-weather-data/.venv/bin/python3.12
+#!/home/liza/projects/global-weather-data/.venv/bin/python3.12
 
 # $Id: rst2latex.py 8956 2022-01-20 10:11:44Z milde $
 # Author: David Goodger <goodger@python.org>

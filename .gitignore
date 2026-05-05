@@ -5,3 +5,5 @@
 /airflow/dags/__pycache__/
 
 /weather_data/secrets.toml
+
+bigquery-key.json

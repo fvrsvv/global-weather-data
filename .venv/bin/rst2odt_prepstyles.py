@@ -1,4 +1,4 @@
-#!/Users/elizavetafavarisova/Documents/projects/global-weather-data/.venv/bin/python3.12
+#!/home/liza/projects/global-weather-data/.venv/bin/python3.12
 
 # $Id: rst2odt_prepstyles.py 8932 2022-01-05 14:59:31Z milde $
 # Author: Dave Kuhlman <dkuhlman@rexx.com>

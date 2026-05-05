@@ -178,7 +178,6 @@ EXPRESSION_METADATA = {
             exp.DateAdd,
             exp.DateTrunc,
             exp.DatetimeTrunc,
-            exp.FirstValue,
             exp.GroupConcat,
             exp.IgnoreNulls,
             exp.JSONExtract,
@@ -339,7 +338,7 @@ EXPRESSION_METADATA = {
     exp.DateFromUnixDate: {"returns": exp.DType.DATE},
     exp.GenerateTimestampArray: {
         "annotator": lambda self, e: self._set_type(
-            e, exp.DataType.build("ARRAY<TIMESTAMP>", dialect="bigquery")
+            e, exp.DataType.from_str("ARRAY<TIMESTAMP>", dialect="bigquery")
         )
     },
     exp.JSONFormat: {
@@ -349,12 +348,12 @@ EXPRESSION_METADATA = {
     },
     exp.JSONKeysAtDepth: {
         "annotator": lambda self, e: self._set_type(
-            e, exp.DataType.build("ARRAY<VARCHAR>", dialect="bigquery")
+            e, exp.DataType.from_str("ARRAY<VARCHAR>", dialect="bigquery")
         )
     },
     exp.JSONValueArray: {
         "annotator": lambda self, e: self._set_type(
-            e, exp.DataType.build("ARRAY<VARCHAR>", dialect="bigquery")
+            e, exp.DataType.from_str("ARRAY<VARCHAR>", dialect="bigquery")
         )
     },
     exp.Lag: {"annotator": lambda self, e: self._annotate_by_args(e, "this", "default")},
@@ -363,7 +362,7 @@ EXPRESSION_METADATA = {
     exp.SafeDivide: {"annotator": lambda self, e: _annotate_safe_divide(self, e)},
     exp.ToCodePoints: {
         "annotator": lambda self, e: self._set_type(
-            e, exp.DataType.build("ARRAY<BIGINT>", dialect="bigquery")
+            e, exp.DataType.from_str("ARRAY<BIGINT>", dialect="bigquery")
         )
     },
 }

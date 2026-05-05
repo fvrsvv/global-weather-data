@@ -1,4 +1,4 @@
-#!/Users/elizavetafavarisova/Documents/projects/global-weather-data/.venv/bin/python3.12
+#!/home/liza/projects/global-weather-data/.venv/bin/python3.12
 # :Copyright: © 2015 Günter Milde.
 # :License: Released under the terms of the `2-Clause BSD license`_, in short:
 #

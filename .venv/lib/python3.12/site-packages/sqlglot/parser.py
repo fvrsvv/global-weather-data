@@ -275,6 +275,15 @@ def _resolve_dialect(dialect: DialectType) -> Dialect:
     return Dialect.get_or_raise(dialect)
 
 
+def _unpivot_target(expr: exp.Expr) -> exp.Expr:
+    # UNPIVOT's pre-FOR values and FOR field are new output names, not column references.
+    if isinstance(expr, exp.Column) and not expr.table:
+        return expr.this
+    if isinstance(expr, exp.Tuple):
+        expr.set("expressions", [_unpivot_target(e) for e in expr.expressions])
+    return expr
+
+
 SENTINEL_NONE: Token = Token(TokenType.SENTINEL, "SENTINEL")
 
 
@@ -342,7 +351,7 @@ class Parser:
         "CONCAT_WS": lambda args, dialect: exp.ConcatWs(
             expressions=args,
             safe=not dialect.STRICT_STRING_CONCAT,
-            coalesce=dialect.CONCAT_COALESCE,
+            coalesce=dialect.CONCAT_WS_COALESCE,
         ),
         "CONVERT_TIMEZONE": build_convert_timezone,
         "DATE_TO_DATE_STR": lambda args: exp.Cast(
@@ -412,6 +421,11 @@ class Parser:
         "UNNEST": lambda args: exp.Unnest(expressions=ensure_list(seq_get(args, 0))),
         "UPPER": build_upper,
         "UUID": lambda args, dialect: exp.Uuid(is_string=dialect.UUID_IS_STRING_TYPE or None),
+        "UUID_STRING": lambda args, dialect: exp.Uuid(
+            this=seq_get(args, 0),
+            name=seq_get(args, 1),
+            is_string=dialect.UUID_IS_STRING_TYPE or None,
+        ),
         "VAR_MAP": build_var_map,
     }
 
@@ -4734,6 +4748,9 @@ class Parser:
         if subquery := self._parse_select(table=True, consume_pipe=consume_pipe):
             if not subquery.args.get("pivots"):
                 subquery.set("pivots", self._parse_pivots())
+            if joins:
+                for join in self._parse_joins():
+                    subquery.append("joins", join)
             return subquery
 
         bracket = parse_bracket and self._parse_bracket(None)
@@ -4996,6 +5013,8 @@ class Parser:
         )
 
     def _parse_pivots(self) -> list[exp.Pivot] | None:
+        if self._curr.token_type not in (TokenType.PIVOT, TokenType.UNPIVOT):
+            return None
         return list(iter(self._parse_pivot, None)) or None
 
     def _parse_joins(self) -> t.Iterator[exp.Join]:
@@ -5141,6 +5160,12 @@ class Parser:
                 group=group,
             )
         )
+
+        if unpivot:
+            pivot.set("expressions", [_unpivot_target(e) for e in pivot.expressions])
+            for pivot_field in pivot.fields:
+                if isinstance(pivot_field, exp.In):
+                    pivot_field.set("this", _unpivot_target(pivot_field.this))
 
         if not self._match_set((TokenType.PIVOT, TokenType.UNPIVOT), advance=False):
             pivot.set("alias", self._parse_table_alias())
@@ -5829,17 +5854,15 @@ class Parser:
 
             self._retreat(index)
 
-        unit = (
-            None
-            if interval_span_units_omitted
-            else (
-                self._parse_function()
-                or (
-                    not self._match_set((TokenType.ALIAS, TokenType.DCOLON), advance=False)
-                    and self._parse_var(any_token=True, upper=True)
-                )
-            )
-        )
+        if interval_span_units_omitted:
+            unit = None
+        else:
+            unit = self._parse_function()
+            if not unit and (
+                self._curr.token_type == TokenType.VAR
+                or self._curr.text.upper() in self.dialect.VALID_INTERVAL_UNITS
+            ):
+                unit = self._parse_var(any_token=True, upper=True)
 
         # Most dialects support, e.g., the form INTERVAL '5' day, thus we try to parse
         # each INTERVAL expression into this canonical form so it's easy to transpile
@@ -6073,7 +6096,7 @@ class Parser:
         while self._match(TokenType.DOT):
             type_name = f"{type_name}.{self._advance_any() and self._prev.text}"
 
-        return exp.DataType.build(type_name, dialect=self.dialect, udt=True)
+        return exp.DataType.from_str(type_name, dialect=self.dialect, udt=True)
 
     def _parse_types(
         self, check_func: bool = False, schema: bool = False, allow_identifiers: bool = True
@@ -6096,7 +6119,7 @@ class Parser:
 
                 if tokens and (type_token := tokens[0].token_type) in self.TYPE_TOKENS:
                     if len(tokens) > 1:
-                        return exp.DataType.build(identifier.name, dialect=self.dialect)
+                        return exp.DataType.from_str(identifier.name, dialect=self.dialect)
                 elif self.dialect.SUPPORTS_USER_DEFINED_TYPES:
                     this = self._parse_user_defined_type(identifier)
                 else:
@@ -6347,7 +6370,7 @@ class Parser:
         return self.expression(exp.ColumnDef(this=col, kind=kind))
 
     def _parse_vector_expressions(self, expressions: list[exp.Expr]) -> list[exp.Expr]:
-        return [exp.DataType.build(expressions[0].name, dialect=self.dialect), *expressions[1:]]
+        return [exp.DataType.from_str(expressions[0].name, dialect=self.dialect), *expressions[1:]]
 
     def _parse_struct_types(self, type_required: bool = False) -> exp.Expr | None:
         index = self._index
@@ -7081,7 +7104,14 @@ class Parser:
         if not kind and not constraints:
             return this
 
-        return self.expression(exp.ColumnDef(this=this, kind=kind, constraints=constraints))
+        position = None
+        if self._match_texts(("FIRST", "AFTER")):
+            pos = self._prev.text
+            position = self.expression(exp.ColumnPosition(this=self._parse_column(), position=pos))
+
+        return self.expression(
+            exp.ColumnDef(this=this, kind=kind, constraints=constraints, position=position)
+        )
 
     def _parse_auto_increment(
         self,
@@ -7601,8 +7631,17 @@ class Parser:
         return self.expression(
             exp.Chr(
                 expressions=self._parse_csv(self._parse_assignment),
-                charset=self._match(TokenType.USING) and self._parse_var(),
+                charset=self._match(TokenType.USING) and self._parse_charset_name(),
             )
+        )
+
+    def _parse_charset_name(self) -> exp.Expr | None:
+        """
+        Parse a charset name after USING or CHARACTER SET. Dialects that need to preserve quoting
+        for specific name shapes override this.
+        """
+        return self._parse_var(
+            tokens={TokenType.BINARY, TokenType.IDENTIFIER},
         )
 
     def _parse_cast(self, strict: bool, safe: bool | None = None) -> exp.Expr:
@@ -7649,7 +7688,7 @@ class Parser:
         elif not to:
             self.raise_error("Expected TYPE after CAST")
         elif isinstance(to, exp.Identifier):
-            to = exp.DataType.build(to.name, dialect=self.dialect, udt=True)
+            to = exp.DataType.from_str(to.name, dialect=self.dialect, udt=True)
         elif to.this == exp.DType.CHAR and self._match(TokenType.CHARACTER_SET):
             to = exp.DType.CHARACTER_SET.into_expr(kind=self._parse_var_or_string())
 
@@ -7721,9 +7760,7 @@ class Parser:
         this = self._parse_bitwise()
 
         if self._match(TokenType.USING):
-            to: exp.Expr | None = exp.DType.CHARACTER_SET.into_expr(
-                kind=self._parse_var(tokens={TokenType.BINARY})
-            )
+            to: exp.Expr | None = exp.DType.CHARACTER_SET.into_expr(kind=self._parse_charset_name())
         elif self._match(TokenType.COMMA):
             to = self._parse_types()
         else:
@@ -7897,12 +7934,18 @@ class Parser:
             kind = None
             nested = True
 
+        format_json = self._match_text_seq("FORMAT", "JSON")
         path = self._match_text_seq("PATH") and self._parse_string()
         nested_schema = nested and self._parse_json_schema()
 
         return self.expression(
             exp.JSONColumnDef(
-                this=this, kind=kind, path=path, nested_schema=nested_schema, ordinality=ordinality
+                this=this,
+                kind=kind,
+                path=path,
+                nested_schema=nested_schema,
+                ordinality=ordinality,
+                format_json=format_json,
             )
         )
 
@@ -8478,25 +8521,16 @@ class Parser:
         if not self._prev.text.upper() == "ADD":
             return None
 
-        expression = self._parse_column_def_with_exists()
-        if not expression:
-            return None
-
-        # https://docs.databricks.com/delta/update-schema.html#explicitly-update-schema-to-add-columns
-        if self._match_texts(("FIRST", "AFTER")):
-            position = self._prev.text
-            column_position = self.expression(
-                exp.ColumnPosition(this=self._parse_column(), position=position)
-            )
-            expression.set("position", column_position)
-
-        return expression
+        return self._parse_column_def_with_exists()
 
     def _parse_drop_column(self) -> exp.Drop | exp.Command | None:
         drop = self._parse_drop() if self._match(TokenType.DROP) else None
         if drop and not isinstance(drop, exp.Command):
             drop.set("kind", drop.args.get("kind", "COLUMN"))
         return drop
+
+    def _parse_alter_drop_action(self) -> exp.Expr | None:
+        return self._parse_drop_column()
 
     # https://docs.aws.amazon.com/athena/latest/ug/alter-table-drop-partition.html
     def _parse_drop_partition(self, exists: bool | None = None) -> exp.DropPartition:
@@ -8608,7 +8642,7 @@ class Parser:
             return self._parse_csv(lambda: self._parse_drop_partition(exists=partition_exists))
 
         self._retreat(index)
-        return self._parse_csv(self._parse_drop_column)
+        return self._parse_csv(self._parse_alter_drop_action)
 
     def _parse_alter_table_rename(self) -> exp.AlterRename | exp.RenameColumn | None:
         if self._match(TokenType.COLUMN) or not self.ALTER_RENAME_REQUIRES_COLUMN:

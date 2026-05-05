@@ -464,6 +464,9 @@ class Generator:
     # Whether the CREATE TABLE LIKE statement is supported
     SUPPORTS_CREATE_TABLE_LIKE = True
 
+    # Whether ALTER TABLE ... MODIFY COLUMN column-redefinition syntax is supported
+    SUPPORTS_MODIFY_COLUMN = False
+
     # Whether the LikeProperty needs to be specified inside of the schema clause
     LIKE_PROPERTY_INSIDE_SCHEMA = False
 
@@ -1880,7 +1883,9 @@ class Generator:
             or lower in self.RESERVED_KEYWORDS
             or (not self.dialect.IDENTIFIERS_CAN_START_WITH_DIGIT and text[:1].isdigit())
         ):
-            text = f"{self._identifier_start}{text}{self._identifier_end}"
+            text = (
+                f"{self._identifier_start}{self._replace_line_breaks(text)}{self._identifier_end}"
+            )
         return text
 
     def hex_sql(self, expression: exp.Hex) -> str:
@@ -3201,6 +3206,7 @@ class Generator:
         if self.UNNEST_WITH_ORDINALITY:
             if alias and isinstance(offset, exp.Expr):
                 alias.append("columns", offset)
+                expression.set("offset", None)
 
         if alias and self.dialect.UNNEST_COLUMN_ONLY:
             columns = alias.columns
@@ -3397,7 +3403,13 @@ class Generator:
         if self.dialect.STRICT_STRING_CONCAT and expression.args.get("safe"):
             args = [exp.cast(e, exp.DType.TEXT) for e in args]
 
-        if not self.dialect.CONCAT_COALESCE and expression.args.get("coalesce"):
+        concat_coalesce = (
+            self.dialect.CONCAT_WS_COALESCE
+            if isinstance(expression, exp.ConcatWs)
+            else self.dialect.CONCAT_COALESCE
+        )
+
+        if not concat_coalesce and expression.args.get("coalesce"):
 
             def _wrap_with_coalesce(e: exp.Expr) -> exp.Expr:
                 if not e.type:
@@ -3432,8 +3444,8 @@ class Generator:
         return self.func("CONCAT", *expressions)
 
     def concatws_sql(self, expression: exp.ConcatWs) -> str:
-        if self.dialect.CONCAT_COALESCE and not expression.args.get("coalesce"):
-            # Dialect's CONCAT_WS function coalesces NULLs to empty strings, but the expression does not.
+        if self.dialect.CONCAT_WS_COALESCE and not expression.args.get("coalesce"):
+            # Dialect's CONCAT_WS function skips NULL args, but the expression does not.
             # Wrap the entire call in a CASE expression that returns NULL if any input IS NULL.
             all_args = expression.expressions
             expression.set("coalesce", True)
@@ -3599,9 +3611,10 @@ class Generator:
         this = self.sql(expression, "this")
         kind = self.sql(expression, "kind")
         kind = f" {kind}" if kind else ""
+        format_json = " FORMAT JSON" if expression.args.get("format_json") else ""
 
         ordinality = " FOR ORDINALITY" if expression.args.get("ordinality") else ""
-        return f"{this}{kind}{path}{ordinality}"
+        return f"{this}{kind}{format_json}{path}{ordinality}"
 
     def jsonschema_sql(self, expression: exp.JSONSchema) -> str:
         return self.func("COLUMNS", *expression.expressions)
@@ -3930,6 +3943,11 @@ class Generator:
 
         return f"ALTER COLUMN {this} DROP DEFAULT"
 
+    def modifycolumn_sql(self, expression: exp.ModifyColumn) -> str:
+        if not self.SUPPORTS_MODIFY_COLUMN:
+            self.unsupported("MODIFY COLUMN is not supported in this dialect")
+        return f"MODIFY COLUMN {self.sql(expression, 'this')}"
+
     def alterindex_sql(self, expression: exp.AlterIndex) -> str:
         this = self.sql(expression, "this")
 
@@ -4040,6 +4058,9 @@ class Generator:
         expressions = self.expressions(expression)
         exists = " IF EXISTS " if expression.args.get("exists") else " "
         return f"DROP{exists}{expressions}"
+
+    def dropprimarykey_sql(self, expression: exp.DropPrimaryKey) -> str:
+        return "DROP PRIMARY KEY"
 
     def addconstraint_sql(self, expression: exp.AddConstraint) -> str:
         return f"ADD {self.expressions(expression, indent=False)}"

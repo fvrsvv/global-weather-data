@@ -570,6 +570,7 @@ class SnowflakeGenerator(generator.Generator):
         ),
         exp.StrToDate: lambda self, e: self.func("DATE", e.this, self.format_time(e)),
         exp.StringToArray: rename_func("STRTOK_TO_ARRAY"),
+        exp.StrtokToArray: rename_func("STRTOK_TO_ARRAY"),
         exp.Stuff: rename_func("INSERT"),
         exp.StPoint: rename_func("ST_MAKEPOINT"),
         exp.TimeAdd: date_delta_sql("TIMEADD"),
@@ -1047,6 +1048,11 @@ class SnowflakeGenerator(generator.Generator):
             expr_sql = self.sql(exp.WithinGroup(this=expr_sql, expression=order))
 
         return expr_sql
+
+    def arraydistinct_sql(self, expression: exp.ArrayDistinct) -> str:
+        if expression.args.get("check_null"):
+            return self.func("ARRAY_DISTINCT", expression.this)
+        return self.func("ARRAY_DISTINCT", exp.ArrayCompact(this=expression.this))
 
     def arraytostring_sql(self, expression: exp.ArrayToString) -> str:
         return self.func("ARRAY_TO_STRING", expression.this, expression.expression)

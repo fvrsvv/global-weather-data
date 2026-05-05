@@ -2,7 +2,11 @@ weather_data:
   target: dev
   outputs:
     dev:
-      type: duckdb
-      path: "md:global-weather-data?motherduck_token={{ env_var('MOTHERDUCK_TOKEN') }}"
-      schema: main
+      type: bigquery
+      method: service-account
+      project: united-button-490809-c4
+      dataset: global_weather
       threads: 4
+      keyfile: /home/liza/projects/global-weather-data/bigquery-key.json
+      location: EU        
+      timeout_seconds: 300

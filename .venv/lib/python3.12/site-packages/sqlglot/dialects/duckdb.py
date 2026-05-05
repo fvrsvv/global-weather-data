@@ -19,10 +19,12 @@ class DuckDB(Dialect):
     SAFE_DIVISION = True
     INDEX_OFFSET = 1
     CONCAT_COALESCE = True
+    CONCAT_WS_COALESCE = True
     SUPPORTS_ORDER_BY_ALL = True
     SUPPORTS_FIXED_SIZE_ARRAYS = True
     STRICT_JSON_PATH_SYNTAX = False
     NUMBERS_CAN_BE_UNDERSCORE_SEPARATED = True
+    UUID_IS_STRING_TYPE = False
 
     # https://duckdb.org/docs/sql/introduction.html#creating-a-new-table
     NORMALIZATION_STRATEGY = NormalizationStrategy.CASE_INSENSITIVE

@@ -15,7 +15,7 @@ from sqlglot.schema import Schema, ensure_schema
 
 if t.TYPE_CHECKING:
     from sqlglot._typing import E
-    from collections.abc import Iterator, Iterable
+    from collections.abc import Iterable
 
 
 def qualify_columns(
@@ -138,13 +138,6 @@ def validate_qualify_columns(expression: E, sql: str | None = None) -> E:
 
                 raise OptimizeError(error_msg)
 
-            if unqualified_columns and scope.pivots and scope.pivots[0].unpivot:
-                # New columns produced by the UNPIVOT can't be qualified, but there may be columns
-                # under the UNPIVOT's IN clause that can and should be qualified. We recompute
-                # this list here to ensure those in the former category will be excluded.
-                unpivot_columns = set(_unpivot_columns(scope.pivots[0]))
-                unqualified_columns = [c for c in unqualified_columns if c not in unpivot_columns]
-
             all_unqualified_columns.extend(unqualified_columns)
 
     if all_unqualified_columns:
@@ -186,17 +179,6 @@ def _separate_pseudocolumns(scope: Scope, pseudocolumns: set[str]) -> None:
 
     if has_pseudocolumns:
         scope.clear_cache()
-
-
-def _unpivot_columns(unpivot: exp.Pivot) -> Iterator[exp.Column]:
-    name_columns = [
-        field.this
-        for field in unpivot.fields
-        if isinstance(field, exp.In) and isinstance(field.this, exp.Column)
-    ]
-    value_columns = (c for e in unpivot.expressions for c in e.find_all(exp.Column))
-
-    return itertools.chain(name_columns, value_columns)
 
 
 def _pop_table_column_aliases(derived_tables: Iterable[exp.Expr]) -> None:
@@ -607,7 +589,13 @@ def _qualify_columns(
         column_name = column.name
 
         if column_table and column_table in scope.sources:
+            column_source = scope.sources[column_table]
             source_columns = resolver.get_source_columns(column_table)
+            # For pivoted sources, source_columns are pre-pivot; validate against the post-pivot set.
+            if isinstance(column_source, exp.Table) and (
+                pivots := column_source.args.get("pivots")
+            ):
+                source_columns = pivots[0].output_columns(source_columns)
             if (
                 not allow_partial_qualification
                 and source_columns
@@ -784,26 +772,7 @@ def _expand_stars(
     coalesced_columns = set()
     dialect = resolver.dialect
 
-    pivot_output_columns = None
-    pivot_exclude_columns: set[str] = set()
-
     pivot = t.cast(t.Optional[exp.Pivot], seq_get(scope.pivots, 0))
-    if isinstance(pivot, exp.Pivot) and not pivot.alias_column_names:
-        if pivot.unpivot:
-            pivot_output_columns = [c.output_name for c in _unpivot_columns(pivot)]
-
-            for field in pivot.fields:
-                if isinstance(field, exp.In):
-                    pivot_exclude_columns.update(
-                        c.output_name for e in field.expressions for c in e.find_all(exp.Column)
-                    )
-
-        else:
-            pivot_exclude_columns = set(c.output_name for c in pivot.find_all(exp.Column))
-
-            pivot_output_columns = [c.output_name for c in pivot.args.get("columns", [])]
-            if not pivot_output_columns:
-                pivot_output_columns = [c.alias_or_name for c in pivot.expressions]
 
     if dialect.SUPPORTS_STRUCT_STAR_EXPANSION and any(
         isinstance(col, exp.Dot) for col in scope.stars
@@ -867,11 +836,7 @@ def _expand_stars(
             replaced_columns = replace_columns.get(table_id, {})
 
             if pivot:
-                if pivot_output_columns and pivot_exclude_columns:
-                    pivot_columns = [c for c in columns if c not in pivot_exclude_columns]
-                    pivot_columns.extend(pivot_output_columns)
-                else:
-                    pivot_columns = pivot.alias_column_names
+                pivot_columns = pivot.alias_column_names or pivot.output_columns(columns)
 
                 if pivot_columns:
                     new_selections.extend(
@@ -991,7 +956,7 @@ def quote_identifiers(expression: E, dialect: DialectType = None, identify: bool
     """Makes sure all identifiers that need to be quoted are quoted."""
     return expression.transform(
         Dialect.get_or_raise(dialect).quote_identifier, identify=identify, copy=False
-    )  # type: ignore
+    )
 
 
 def pushdown_cte_alias_columns(scope: Scope) -> None:

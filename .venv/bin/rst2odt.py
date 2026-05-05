@@ -1,4 +1,4 @@
-#!/Users/elizavetafavarisova/Documents/projects/global-weather-data/.venv/bin/python3.12
+#!/home/liza/projects/global-weather-data/.venv/bin/python3.12
 
 # $Id: rst2odt.py 8994 2022-01-29 16:28:17Z milde $
 # Author: Dave Kuhlman <dkuhlman@rexx.com>

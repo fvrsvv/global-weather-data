@@ -1,4 +1,4 @@
-#!/Users/elizavetafavarisova/Documents/projects/global-weather-data/.venv/bin/python3.12
+#!/home/liza/projects/global-weather-data/.venv/bin/python3.12
 
 # Author:
 # Contact: grubert@users.sf.net

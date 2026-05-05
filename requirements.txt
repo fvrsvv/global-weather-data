@@ -1,0 +1,8 @@
+openmeteo_requests
+requests_cache
+retry_requests
+pandas
+dlt
+dlt[s3]
+dlt[parquet]
+dlt[pyiceberg]

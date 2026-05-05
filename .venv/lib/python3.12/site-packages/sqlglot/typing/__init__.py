@@ -252,6 +252,7 @@ EXPRESSION_METADATA: ExprMetadataType = {
             exp.ArrayReverse,
             exp.ArraySlice,
             exp.Filter,
+            exp.FirstValue,
             exp.HavingMax,
             exp.LastValue,
             exp.Limit,
@@ -335,10 +336,10 @@ EXPRESSION_METADATA: ExprMetadataType = {
         "annotator": lambda self, e: self._annotate_by_args(e, "start", "end", "step", array=True)
     },
     exp.GenerateDateArray: {
-        "annotator": lambda self, e: self._set_type(e, exp.DataType.build("ARRAY<DATE>"))
+        "annotator": lambda self, e: self._set_type(e, exp.DataType.from_str("ARRAY<DATE>"))
     },
     exp.GenerateTimestampArray: {
-        "annotator": lambda self, e: self._set_type(e, exp.DataType.build("ARRAY<TIMESTAMP>"))
+        "annotator": lambda self, e: self._set_type(e, exp.DataType.from_str("ARRAY<TIMESTAMP>"))
     },
     exp.If: {"annotator": lambda self, e: self._annotate_by_args(e, "true", "false")},
     exp.Literal: {"annotator": lambda self, e: self._annotate_literal(e)},

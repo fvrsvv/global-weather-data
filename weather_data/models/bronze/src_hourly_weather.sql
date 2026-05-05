@@ -1,6 +1,6 @@
 {{ config(
     materialized = 'view',
-    alias = 'hourly_weather'
+    alias = 'hourly_weather',
 ) }}
 
 SELECT 
@@ -20,10 +20,4 @@ SELECT
     weather_code,
     ingestion_time,
     load_date
-FROM read_parquet(
-    's3://global-weather-data/bronze/hourly_weather/*.parquet',
-    s3_access_key_id     = '{{ env_var("DESTINATION__FILESYSTEM__CREDENTIALS__AWS_ACCESS_KEY_ID") }}',
-    s3_secret_access_key = '{{ env_var("DESTINATION__FILESYSTEM__CREDENTIALS__AWS_SECRET_ACCESS_KEY") }}',
-    s3_endpoint          = 'storage.yandexcloud.net',
-    s3_url_style = 'path'
-)
+FROM read_parquet('s3://global-weather-data/bronze/hourly_weather/data/*.parquet')

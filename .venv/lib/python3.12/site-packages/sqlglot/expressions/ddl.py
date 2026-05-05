@@ -245,6 +245,10 @@ class AlterColumn(Expression):
     }
 
 
+class ModifyColumn(Expression):
+    pass
+
+
 class AlterIndex(Expression):
     arg_types = {"this": True, "visible": True}
 
@@ -352,6 +356,10 @@ class Drop(Expression):
     def kind(self) -> str | None:
         kind = self.args.get("kind")
         return kind and kind.upper()
+
+
+class DropPrimaryKey(Expression):
+    arg_types = {}
 
 
 class Command(Expression):

@@ -1,4 +1,4 @@
-#!/Users/elizavetafavarisova/Documents/projects/global-weather-data/.venv/bin/python3.12
+#!/home/liza/projects/global-weather-data/.venv/bin/python3.12
 
 # $Id: rst2s5.py 8927 2022-01-03 23:50:05Z milde $
 # Author: Chris Liechti <cliechti@gmx.net>

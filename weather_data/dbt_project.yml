@@ -8,8 +8,8 @@ version: '1.0.0'
 # This setting configures which "profile" dbt uses for this project.
 profile: 'weather_data'
 
-vars:
-  motherduck_token: "{{ env_var('MOTHERDUCK_TOKEN') }}"
+# vars:
+#   motherduck_token: "{{ env_var('MOTHERDUCK_TOKEN') }}"
 
 # These configurations specify where dbt should look for different types of files.
 # The `model-paths` config, for example, states that models in this project can be
@@ -37,9 +37,9 @@ models:
     bronze:
       +materialized: view
       +schema: bronze
-    silver:
-      +materialized: table
-      +schema: silver
-    gold:
-      +materialized: table
-      +schema: gold
+    # silver:
+    #   +materialized: table
+    #   +schema: silver
+    # gold:
+    #   +materialized: table
+    #   +schema: gold

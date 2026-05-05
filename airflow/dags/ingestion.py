@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# ==================== НАСТРОЙКИ ====================
 CITIES = [
     {"name": "Moscow", "latitude": 55.7558, "longitude": 37.6173},
     {"name": "Saint Petersburg", "latitude": 59.9343, "longitude": 30.3351},
