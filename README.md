@@ -22,3 +22,5 @@ Bronze → dlt загружает сырые Parquet в Yandex Object Storage
 Silver → dbt или Python task в Airflow 
 Gold → dbt-модели в DWH (аналитические витрины)
 Incremental loads каждый день 
+
+https://github.com/fvrsvv/global-weather-data

@@ -2,11 +2,14 @@ weather_data:
   target: dev
   outputs:
     dev:
-      type: bigquery
-      method: service-account
-      project: united-button-490809-c4
-      dataset: global_weather
+      type: duckdb
+      path: "{{ env_var('DBT_PROJECT_DIR', '.') }}/global_weather.duckdb"
       threads: 4
-      keyfile: /home/liza/projects/global-weather-data/bigquery-key.json
-      location: EU        
-      timeout_seconds: 300
+      extensions: ['httpfs', 'parquet']
+      settings:
+        s3_access_key_id: "{{ env_var('DESTINATION__FILESYSTEM__CREDENTIALS__AWS_ACCESS_KEY_ID') }}"
+        s3_secret_access_key: "{{ env_var('DESTINATION__FILESYSTEM__CREDENTIALS__AWS_SECRET_ACCESS_KEY') }}"
+        s3_endpoint: "storage.yandexcloud.net"
+        s3_use_ssl: true
+        s3_url_style: "path"
+        s3_region: "ru-central-1"

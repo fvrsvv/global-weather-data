@@ -7,3 +7,10 @@
 /weather_data/secrets.toml
 
 bigquery-key.json
+
+# DuckDB
+*.duckdb
+*.duckdb.wal
+*.db
+
+# dbt
