@@ -2,7 +2,7 @@
 x-airflow-common:
   &airflow-common
   build: .
-  image: my-airflow
+  image: my-airflow:latest
   env_file:
       - ./.env
   environment:
@@ -66,10 +66,27 @@ services:
       start_period: 30s
     restart: always
 
-  airflow-api-server:
+  # airflow-api-server:
+  #   <<: *airflow-common
+  #   container_name: airflow-webserver
+  #   command: api-server      
+  #   ports:
+  #     - "8080:8080"
+  #   healthcheck:
+  #     test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
+  #     start_period: 30s
+  #   restart: always
+  #   depends_on:
+  #     <<: *airflow-common-depends-on
+  #     airflow-init:
+  #       condition: service_completed_successfully
+
+  airflow-webserver:
     <<: *airflow-common
-    container_name: airflow-webserver
-    command: api-server      
+    command: webserver
     ports:
       - "8080:8080"
     healthcheck:

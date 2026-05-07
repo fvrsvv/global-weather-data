@@ -2,6 +2,7 @@ import dlt
 import openmeteo_requests
 from datetime import datetime, timedelta
 import pandas as pd
+import os
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
@@ -72,9 +73,9 @@ def run_dlt_pipeline():
         destination="filesystem",
         dataset_name=DATASET_NAME,
         credentials={
-            "aws_access_key_id": Variable.get("YANDEX_ACCESS_KEY_ID"),
-            "aws_secret_access_key": Variable.get("YANDEX_SECRET_ACCESS_KEY"),
-            "endpoint_url": "https://storage.yandexcloud.net",
+            "aws_access_key_id": os.getenv("DESTINATION__FILESYSTEM__CREDENTIALS__AWS_ACCESS_KEY_ID"),
+            "aws_secret_access_key": os.getenv("DESTINATION__FILESYSTEM__CREDENTIALS__AWS_SECRET_ACCESS_KEY"),
+            "endpoint_url": "https://storage.yandexcloud.net/bronze-weather-data",
             "region_name": "ru-central1"
         }
     )
@@ -91,7 +92,7 @@ def run_dlt_pipeline():
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'retries': 2,
+    # 'retries': 2,
     'retry_delay': timedelta(minutes=5),
 }
 
@@ -99,8 +100,9 @@ with DAG(
     dag_id="open_meteo_actual_hourly",
     default_args=default_args,
     description="Ежечасная загрузка фактической погоды из Open-Meteo",
-    schedule_interval="0 * * * *",      # каждый час в :00
+    schedule_interval="0 * * * *",      
     start_date=datetime(2025, 1, 1),
+    is_paused_upon_creation=False,
     catchup=False,
     tags=["weather", "open-meteo", "dlt"],
 ) as dag:

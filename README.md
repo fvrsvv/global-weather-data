@@ -9,7 +9,7 @@
 
 **Структура проекта**
 - API --- Open-Meteo
-- Ingestiondlt --- data load tool (dlt)
+- Ingestion --- data load tool (dlt)
 - Data Lake --- Yandex Object Storage (S3)
 - Orchestration --- Airflow
 - DWH --- Clickhouse (local)

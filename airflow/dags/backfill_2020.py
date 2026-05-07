@@ -79,7 +79,7 @@ if __name__ == "__main__":
         credentials={
             "aws_access_key_id": dlt.secrets.value,
             "aws_secret_access_key": dlt.secrets.value,
-            "endpoint_url": "https://storage.yandexcloud.net",
+            "endpoint_url": "https://storage.yandexcloud.net/bronze-weather-data",
             "region_name": "ru-central1"
         }
     )
