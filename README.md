@@ -3,7 +3,7 @@
 
 ## О проекте
 Проект представляет собой полноценный облачный ELT-пайплайн, который ежедневно собирает исторические и прогнозные погодные данные из открытого API Open-Meteo, сохраняет их в объектное хранилище и трансформирует в удобные аналитические витрины.
-Цель проекта — продемонстрировать навыки построения современного data stack: от ingestion сырых данных из API до готовых бизнес-витрин и дашбордов.
+Цель проекта — продемонстрировать навыки построения современного data stack: от сбора сырых данных из API до готовых бизнес-витрин и дашбордов.
 
 ---
 
@@ -12,9 +12,9 @@
 - Ingestiondlt --- data load tool (dlt)
 - Data Lake --- Yandex Object Storage (S3)
 - Orchestration --- Airflow
-- Warehouse --- MotherDuck/BigQuery/Snowflake/Databricks SQL
-- Transformation --- dbt-core + dbt-duckd
-- Visualization --- Streamlit (или Metabase)
+- DWH --- Clickhouse (local)
+- Transformation --- dbt
+- Visualization --- Metabase
 - CI/CD --- GitHub Actions
 
 **Архитектура проекта (Medalion)**

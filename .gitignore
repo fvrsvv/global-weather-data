@@ -4,13 +4,7 @@
 /airflow/dags/.cache.sqlite
 /airflow/dags/__pycache__/
 
-/weather_data/secrets.toml
+/logs
+dbt.log
 
-bigquery-key.json
-
-# DuckDB
-*.duckdb
-*.duckdb.wal
-*.db
-
-# dbt
+secrets.toml

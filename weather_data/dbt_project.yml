@@ -33,7 +33,7 @@ models:
   weather_data:
     bronze:
       +materialized: view
-      +schema: bronze
+      # +schema: my
     # silver:
     #   +materialized: table
     #   +schema: silver

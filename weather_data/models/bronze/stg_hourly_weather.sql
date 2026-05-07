@@ -1,6 +1,6 @@
 {{ config(
     materialized = 'table',
-    alias = 'stg_hourly_weather',
+    alias = 'stg_hourly_weather'
 ) }}
 
 SELECT 
@@ -20,7 +20,4 @@ SELECT
     weather_code,
     ingestion_time,
     load_date
-FROM read_parquet(
-    's3://global-weather-data/bronze/hourly_weather/data/*.parquet',
-    filename = true
-)
+FROM s3('https://storage.yandexcloud.net/global-weather-data/bronze/hourly_weather/data/*.parquet')

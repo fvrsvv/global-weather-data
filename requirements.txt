@@ -6,3 +6,4 @@ dlt
 dlt[s3]
 dlt[parquet]
 dlt[pyiceberg]
+dlt[filesystem,s3] 
