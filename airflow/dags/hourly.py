@@ -2,11 +2,9 @@ import dlt
 import openmeteo_requests
 from datetime import datetime, timedelta
 import pandas as pd
-import os
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.models import Variable
 
 
 # ========================= НАСТРОЙКИ =========================
@@ -24,7 +22,7 @@ DATASET_NAME = "bronze_weather_data"
 # ===========================================================
 
 
-def fetch_recent_weather(lat, lon):
+def fetch_recent_weather(lat: float, lon: float) -> pd.DataFrame:
     """Получаем данные за последние 2 дня"""
     url = "https://archive-api.open-meteo.com/v1/archive"
     
@@ -45,39 +43,36 @@ def fetch_recent_weather(lat, lon):
     response = responses[0]
     hourly = response.Hourly()
 
-    data = {
-        "time": pd.date_range(start=hourly.Time(), periods=len(hourly.Time()), freq="h"),
-    }
+    times_unix = hourly.Time()
+    times = pd.to_datetime(times_unix, unit="s")
+
+    data = {"time": times}
+    
     for i, var in enumerate(VARIABLES):
-        data[var] = hourly.Variables(i).ValuesAsNumpy()
+        values = hourly.Variables(i).ValuesAsNumpy()
+        data[var] = values
 
     df = pd.DataFrame(data)
     df["location"] = "moscow"
     df["ingested_at"] = datetime.utcnow()
+
+    print(f"✅ Загружено строк: {len(df)} | Время с {df['time'].min()} по {df['time'].max()}")
     return df
 
 
-@dlt.resource(name="weather_actual", write_disposition="merge", primary_key=["time", "location"])
 def weather_resource():
-    """dlt resource"""
+    """Генератор для dlt"""
     for loc in LOCATIONS:
         df = fetch_recent_weather(loc["lat"], loc["lon"])
         yield df
 
 
 def run_dlt_pipeline():
-    """Основная функция, которую будет вызывать Airflow"""
-    
+    """Основная функция"""
     pipeline = dlt.pipeline(
         pipeline_name="open_meteo_actual_hourly",
         destination="filesystem",
         dataset_name=DATASET_NAME,
-        credentials={
-            "aws_access_key_id": os.getenv("DESTINATION__FILESYSTEM__CREDENTIALS__AWS_ACCESS_KEY_ID"),
-            "aws_secret_access_key": os.getenv("DESTINATION__FILESYSTEM__CREDENTIALS__AWS_SECRET_ACCESS_KEY"),
-            "endpoint_url": "https://storage.yandexcloud.net/bronze-weather-data",
-            "region_name": "ru-central1"
-        }
     )
 
     pipeline.run(
@@ -92,25 +87,23 @@ def run_dlt_pipeline():
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    # 'retries': 2,
     'retry_delay': timedelta(minutes=5),
+    'retries': 2,
 }
 
-with DAG(
+dag = DAG(
     dag_id="open_meteo_actual_hourly",
     default_args=default_args,
     description="Ежечасная загрузка фактической погоды из Open-Meteo",
-    schedule_interval="0 * * * *",      
+    # schedule_interval="0 * * * *",
     start_date=datetime(2025, 1, 1),
-    is_paused_upon_creation=False,
     catchup=False,
     tags=["weather", "open-meteo", "dlt"],
-) as dag:
+    is_paused_upon_creation=False,
+)
 
-    hourly_task = PythonOperator(
-        task_id="ingest_weather_actual",
-        python_callable=run_dlt_pipeline,
-        provide_context=True,
-    )
-
-    hourly_task
+ingest_weather_actual = PythonOperator(
+    task_id="ingest_weather_actual",
+    python_callable=run_dlt_pipeline,
+    dag=dag,
+)
