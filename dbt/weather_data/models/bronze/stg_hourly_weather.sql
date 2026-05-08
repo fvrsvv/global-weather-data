@@ -3,21 +3,20 @@
     alias = 'stg_hourly_weather'
 ) }}
 
-SELECT 
-    "timestamp"                  as weather_timestamp,
-    city,
+SELECT
+    location_name,
     temperature_2m               as temp_c,
     relative_humidity_2m         as humidity_percent,
     apparent_temperature         as feels_like_c,
     precipitation,
-    rain,
-    showers,
-    snowfall,
     wind_speed_10m               as wind_speed_kmh,
     wind_direction_10m           as wind_direction,
     cloud_cover,
-    pressure_msl                 as pressure_hpa,
     weather_code,
-    ingestion_time,
+    surface_pressure, 
+    et0_fao_evapotranspiration
     load_date
-FROM s3('https://storage.yandexcloud.net/global-weather-data/bronze/hourly_weather/data/*.parquet')
+FROM s3('https://storage.yandexcloud.net/global-weather-data/bronze_weather_data/hourly_weather/*.parquet',
+        '{{ env_var("DESTINATION__FILESYSTEM__CREDENTIALS__AWS_ACCESS_KEY_ID") }}',
+        '{{ env_var("DESTINATION__FILESYSTEM__CREDENTIALS__AWS_SECRET_ACCESS_KEY") }}',
+        'Parquet')
