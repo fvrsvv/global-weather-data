@@ -1,0 +1,20 @@
+weather_data:
+  target: dev
+  outputs:
+    dev:
+      type: clickhouse
+      host: localhost
+      port: 8123
+      user: "{{ env_var('CLICKHOUSE_USER') }}"
+      password: "{{ env_var('CLICKHOUSE_PASSWORD') }}"
+      schema: "{{ env_var('CLICKHOUSE_DATABASE') }}"
+      threads: 4
+      keepalives_idle: 30
+      extensions: ['httpfs', 'parquet']
+      settings:
+        s3_access_key_id: "{{ env_var('DESTINATION__FILESYSTEM__CREDENTIALS__AWS_ACCESS_KEY_ID') }}"
+        s3_secret_access_key: "{{ env_var('DESTINATION__FILESYSTEM__CREDENTIALS__AWS_SECRET_ACCESS_KEY') }}"
+        s3_endpoint: "storage.yandexcloud.net"
+        s3_use_ssl: true
+        s3_url_style: "path"
+        s3_region: "ru-central-1"

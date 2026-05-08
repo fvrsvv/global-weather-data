@@ -1,0 +1,11 @@
+.env
+/.venv
+
+/airflow/dags/.cache.sqlite
+/airflow/dags/__pycache__/
+/airflow/logs
+
+/logs
+dbt.log
+
+secrets.toml

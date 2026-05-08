@@ -1,0 +1,13 @@
+openmeteo_requests
+requests_cache
+retry_requests
+pandas
+
+# apache-airflow
+# airflow-operators
+
+dlt
+dlt[s3]
+dlt[parquet]
+dlt[pyiceberg]
+dlt[filesystem,s3] 
