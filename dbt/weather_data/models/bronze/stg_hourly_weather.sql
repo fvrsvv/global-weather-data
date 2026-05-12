@@ -16,7 +16,7 @@ SELECT
     surface_pressure, 
     et0_fao_evapotranspiration
     load_date
-FROM s3('https://storage.yandexcloud.net/global-weather-data/bronze_weather_data/hourly_weather/*.parquet',
+FROM s3('https://storage.yandexcloud.net/bronze-weather-data/weather_data/hourly_weather/*.parquet',
         '{{ env_var("DESTINATION__FILESYSTEM__CREDENTIALS__AWS_ACCESS_KEY_ID") }}',
         '{{ env_var("DESTINATION__FILESYSTEM__CREDENTIALS__AWS_SECRET_ACCESS_KEY") }}',
         'Parquet')
