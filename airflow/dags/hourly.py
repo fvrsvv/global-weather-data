@@ -17,7 +17,7 @@ VARIABLES = [
     "cloud_cover", "surface_pressure", "et0_fao_evapotranspiration"
 ]
 
-DATASET_NAME = "bronze_weather_data"
+DATASET_NAME = "weather_data"
 
 def fetch_recent_weather(lat: float, lon: float, location_name: str) -> pd.DataFrame:
     """Получаем данные только за последний час"""
