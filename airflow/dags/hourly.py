@@ -17,7 +17,7 @@ VARIABLES = [
     "cloud_cover", "surface_pressure", "et0_fao_evapotranspiration"
 ]
 
-DATASET_NAME = "weather_data"
+# DATASET_NAME = "weather_data"
 
 def fetch_recent_weather(lat: float, lon: float, location_name: str) -> pd.DataFrame:
     """Получаем данные только за последний час"""
@@ -68,7 +68,7 @@ def run_dlt_pipeline():
     pipeline = dlt.pipeline(
         pipeline_name="open_meteo_actual_hourly",
         destination="filesystem",
-        dataset_name=DATASET_NAME,
+        dataset_name="hourly_weather_data",
     )
 
     pipeline.run(
