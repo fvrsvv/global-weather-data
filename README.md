@@ -18,7 +18,7 @@
 - CI/CD --- GitHub Actions
 
 **Архитектура проекта (Medalion)**
-Bronze → dlt загружает сырые Parquet в Yandex Object Storage 
+Bronze → dlt загружает сырые Parquet в Yandex Object Storage (table format iceberg)
 Silver → dbt или Python task в Airflow 
 Gold → dbt-модели в DWH (аналитические витрины)
 Incremental loads каждый день 

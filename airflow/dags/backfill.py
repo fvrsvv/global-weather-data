@@ -1,10 +1,11 @@
 import openmeteo_requests
-import requests_cache
-from retry_requests import retry
 import pandas as pd
 from datetime import datetime, timedelta
 import dlt
 from dotenv import load_dotenv
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from datetime import datetime, timedelta, timezone
 
 load_dotenv()
 
@@ -18,7 +19,7 @@ VARIABLES = [
     "cloud_cover", "surface_pressure", "et0_fao_evapotranspiration"
 ]
 
-START_DATE = "2020-01-01"
+START_DATE = "2026-01-01"
 END_DATE = datetime.now().strftime("%Y-%m-%d")
 
 # ==================== dlt RESOURCE ====================
@@ -35,20 +36,29 @@ def fetch_historical_chunk(lat, lon, start_date, end_date):
     
     openmeteo = openmeteo_requests.Client()
     responses = openmeteo.weather_api(url, params=params)
-    
-    # Берём первый (и единственный) ответ
     response = responses[0]
     hourly = response.Hourly()
     
+    num_values = hourly.Variables(0).ValuesLength()
+    interval_sec = hourly.Interval()
+    
+    time_index = pd.date_range(
+        start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
+        periods=num_values,
+        freq=pd.Timedelta(seconds=interval_sec)
+    )
+    
     data = {
-        "time": pd.date_range(start=hourly.Time(), periods=len(hourly.Time()), freq="h"),
+        "time": time_index
     }
+    
     for i, var in enumerate(VARIABLES):
         data[var] = hourly.Variables(i).ValuesAsNumpy()
     
     df = pd.DataFrame(data)
     df["location"] = "moscow"
-    df["ingested_at"] = datetime.utcnow()
+    df["ingested_at"] = datetime.now(timezone.utc)
+    
     return df
 
 @dlt.resource(name="weather_actual", write_disposition="merge", primary_key=["time", "location"])
@@ -57,7 +67,7 @@ def weather_backfill():
     end = datetime.strptime(END_DATE, "%Y-%m-%d")
     
     while current <= end:
-        chunk_end = min(current + timedelta(days=30), end)  # по 30 дней — безопасно
+        chunk_end = min(current + timedelta(days=30), end)  
         
         print(f"Загружаем {current.strftime('%Y-%m-%d')} — {chunk_end.strftime('%Y-%m-%d')}")
         
@@ -71,17 +81,11 @@ def weather_backfill():
 
 
 # ==================== PIPELINE ====================
-if __name__ == "__main__":
+def run_dlt_pipeline():
     pipeline = dlt.pipeline(
         pipeline_name="open_meteo_actual_backfill",
         destination="filesystem",
-        dataset_name="bronze_weather_data",
-        credentials={
-            "aws_access_key_id": dlt.secrets.value,
-            "aws_secret_access_key": dlt.secrets.value,
-            "endpoint_url": "https://storage.yandexcloud.net/bronze-weather-data",
-            "region_name": "ru-central1"
-        }
+        dataset_name="backfill_data",
     )
 
     load_info = pipeline.run(
@@ -94,3 +98,26 @@ if __name__ == "__main__":
 
     print("✅ Backfill завершён, данные успешно загружены.")
     print(load_info)
+
+# ====================== DAG =========================
+default_args = {
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'retry_delay': timedelta(minutes=5),
+    'retries': 3,
+}
+
+dag = DAG(
+    dag_id="open_meteo_backfill_hourly",
+    default_args=default_args,
+    description="Ежечасная загрузка погоды c 01.01.2026",
+    catchup=False,
+    tags=["weather", "open-meteo", "dlt"],
+    is_paused_upon_creation=False,
+)
+
+ingest_weather_actual = PythonOperator(
+    task_id="ingest_weather_actual",
+    python_callable=run_dlt_pipeline,
+    dag=dag,
+)
