@@ -1,10 +1,9 @@
 {{ config(
     materialized = 'table',
-    alias = 'stg_hourly_weather'
+    alias = 'stg_hourly_weather_backfill'
 ) }}
 
 SELECT
-    location_name,
     temperature_2m               as temp_c,
     relative_humidity_2m         as humidity_percent,
     apparent_temperature         as feels_like_c,
@@ -16,7 +15,7 @@ SELECT
     surface_pressure, 
     et0_fao_evapotranspiration
     load_date
-FROM s3('https://storage.yandexcloud.net/bronze-weather-data/weather_data/hourly_weather/*.parquet',
+FROM s3('https://storage.yandexcloud.net/global-weather-data/bronze_weather_data/hourly_weather/data/*.parquet',
         '{{ env_var("DESTINATION__FILESYSTEM__CREDENTIALS__AWS_ACCESS_KEY_ID") }}',
         '{{ env_var("DESTINATION__FILESYSTEM__CREDENTIALS__AWS_SECRET_ACCESS_KEY") }}',
         'Parquet')

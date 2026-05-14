@@ -1,121 +1,123 @@
-import dlt
 import openmeteo_requests
-from datetime import datetime, timedelta
 import pandas as pd
+from datetime import datetime, timedelta
+import dlt
+from dotenv import load_dotenv
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+from datetime import datetime, timedelta, timezone
 
-# ================== КОНФИГУРАЦИЯ ==================
+load_dotenv()
+
 LOCATIONS = [
-    {"name": "moscow", "lat": 55.7558, "lon": 37.6173},
+    {"name": "moscow", "lat": 55.7558, "lon": 37.6173}
 ]
 
 VARIABLES = [
-    "temperature_2m",
-    "apparent_temperature",
-    "precipitation",
-    "weather_code",
-    "relative_humidity_2m",
-    "wind_speed_10m",
-    "wind_direction_10m",
-    "cloud_cover",
-    "surface_pressure",
-    "et0_fao_evapotranspiration",
+    "temperature_2m", "apparent_temperature", "precipitation", "weather_code",
+    "relative_humidity_2m", "wind_speed_10m", "wind_direction_10m",
+    "cloud_cover", "surface_pressure", "et0_fao_evapotranspiration"
 ]
 
-# ================== ФУНКЦИИ ==================
-def fetch_recent_weather(lat: float, lon: float, location_name: str) -> pd.DataFrame:
-    """Получаем данные за последний час (или два, чтобы точно захватить актуальный)"""
-    url = "https://archive-api.open-meteo.com/v1/archive"
-    
-    now = datetime.utcnow()
-    start_time = (now - timedelta(hours=2)).replace(minute=0, second=0, microsecond=0)
-    end_time = now.replace(minute=0, second=0, microsecond=0)
+START_DATE = "2026-01-01"
+END_DATE = datetime.now().strftime("%Y-%m-%d")
 
+# ==================== dlt RESOURCE ====================
+def fetch_historical_chunk(lat, lon, start_date, end_date):
+    url = "https://archive-api.open-meteo.com/v1/archive"
     params = {
         "latitude": lat,
         "longitude": lon,
-        "start_hour": start_time.strftime("%Y-%m-%dT%H:00"),
-        "end_hour": end_time.strftime("%Y-%m-%dT%H:00"),
-        "hourly": ",".join(VARIABLES),   # строка через запятую — надёжнее
-        "timezone": "UTC",
+        "start_date": start_date,
+        "end_date": end_date,
+        "hourly": VARIABLES,
+        "timezone": "Europe/Moscow"
     }
-
+    
     openmeteo = openmeteo_requests.Client()
     responses = openmeteo.weather_api(url, params=params)
     response = responses[0]
-
     hourly = response.Hourly()
-
-    # Правильное создание диапазона времени (стандартный способ из документации openmeteo)
-    times = pd.date_range(
+    
+    num_values = hourly.Variables(0).ValuesLength()
+    interval_sec = hourly.Interval()
+    
+    time_index = pd.date_range(
         start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
-        end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
-        freq=pd.Timedelta(seconds=hourly.Interval()),
-        inclusive="left",
+        periods=num_values,
+        freq=pd.Timedelta(seconds=interval_sec)
     )
-
-    data = {"time": times}
+    
+    data = {
+        "time": time_index
+    }
+    
     for i, var in enumerate(VARIABLES):
         data[var] = hourly.Variables(i).ValuesAsNumpy()
-
+    
     df = pd.DataFrame(data)
-    
-    # Берём только самую последнюю запись (актуальный час)
-    df = df.tail(1).reset_index(drop=True)
-    
-    df["location_name"] = location_name
-    df["ingested_at"] = datetime.utcnow()
+    df["location"] = "moscow"
+    df["ingested_at"] = datetime.now(timezone.utc)
     
     return df
 
-
-def weather_resource():
-    """dlt resource — генератор датафреймов"""
-    for loc in LOCATIONS:
-        df = fetch_recent_weather(loc["lat"], loc["lon"], loc["name"])
-        yield df   # dlt отлично умеет работать с pandas DataFrame
-
-
-def run_dlt_pipeline():
-    """Запуск пайплайна dlt"""
-    pipeline = dlt.pipeline(
-        pipeline_name="open_meteo_actual_hourly",
-        destination="filesystem",           # можно поменять на postgres, duckdb и т.д.
-        dataset_name="hourly_weather_data",
-    )
-
-    pipeline.run(
-        weather_resource(),
-        loader_file_format="parquet",
-        table_name="hourly_weather",
-        # Дополнительные полезные параметры:
-        write_disposition="append",        # добавляем новые строки
-    )
+@dlt.resource(name="weather_actual", write_disposition="merge", primary_key=["time", "location"])
+def weather_backfill():
+    current = datetime.strptime(START_DATE, "%Y-%m-%d")
+    end = datetime.strptime(END_DATE, "%Y-%m-%d")
     
-    print("✅ Hourly weather update completed successfully!")
+    while current <= end:
+        chunk_end = min(current + timedelta(days=30), end)  
+        
+        print(f"Загружаем {current.strftime('%Y-%m-%d')} — {chunk_end.strftime('%Y-%m-%d')}")
+        
+        for loc in LOCATIONS:
+            df = fetch_historical_chunk(loc["lat"], loc["lon"], 
+                                      current.strftime("%Y-%m-%d"), 
+                                      chunk_end.strftime("%Y-%m-%d"))
+            yield df
+        
+        current = chunk_end + timedelta(days=1)
 
+
+# ==================== PIPELINE ====================
+def run_dlt_pipeline():
+    pipeline = dlt.pipeline(
+        pipeline_name="open_meteo_actual_backfill",
+        destination="filesystem",
+        dataset_name="backfill_data",
+    )
+
+    load_info = pipeline.run(
+        weather_backfill(),
+        loader_file_format="parquet",
+        table_format="iceberg",
+        table_name="hourly_weather",
+        write_disposition="append"
+    )
+
+    print("✅ Backfill завершён, данные успешно загружены.")
+    print(load_info)
 
 # ====================== DAG =========================
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'retries': 3,
     'retry_delay': timedelta(minutes=5),
+    'retries': 3,
 }
 
-with DAG(
+dag = DAG(
     dag_id="open_meteo_backfill_hourly",
     default_args=default_args,
-    description="Ежечасная загрузка фактической погоды (только последний час)",
-    schedule="0 * * * *",                  # каждый час в начале часа
-    start_date=datetime(2026, 1, 1),
+    description="Ежечасная загрузка погоды c 01.01.2026",
     catchup=False,
     tags=["weather", "open-meteo", "dlt"],
     is_paused_upon_creation=False,
-) as dag:
+)
 
-    ingest_weather_actual = PythonOperator(
-        task_id="ingest_weather_actual",
-        python_callable=run_dlt_pipeline,
-    )
+ingest_weather_actual = PythonOperator(
+    task_id="ingest_weather_actual",
+    python_callable=run_dlt_pipeline,
+    dag=dag,
+)
