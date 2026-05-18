@@ -107,14 +107,14 @@ default_args = {
     'retries': 3,
 }
 
-dag = DAG(
-    dag_id="open_meteo_backfill_hourly",
-    default_args=default_args,
-    description="Ежечасная загрузка погоды c 01.01.2026",
-    catchup=False,
-    tags=["weather", "open-meteo", "dlt"],
-    is_paused_upon_creation=False,
-)
+# dag = DAG(
+#     dag_id="open_meteo_backfill_hourly",
+#     default_args=default_args,
+#     description="Ежечасная загрузка погоды c 01.01.2026",
+#     catchup=False,
+#     tags=["weather", "open-meteo", "dlt"],
+#     is_paused_upon_creation=False,
+# )
 
 ingest_weather_actual = PythonOperator(
     task_id="ingest_weather_actual",

@@ -1,15 +1,9 @@
+from datetime import datetime, timedelta, timezone
+import pandas as pd
 import dlt
 import openmeteo_requests
-from datetime import datetime, timedelta
-import pandas as pd
 
-from airflow import DAG
-from airflow.operators.python import PythonOperator
-
-
-LOCATIONS = [
-    {"name": "moscow", "lat": 55.7558, "lon": 37.6173}
-]
+from airflow.decorators import dag, task
 
 VARIABLES = [
     "temperature_2m", "apparent_temperature", "precipitation", "weather_code",
@@ -17,11 +11,10 @@ VARIABLES = [
     "cloud_cover", "surface_pressure", "et0_fao_evapotranspiration"
 ]
 
-def fetch_recent_weather(lat: float, lon: float, location_name: str) -> pd.DataFrame:
-    """Получаем данные только за последний час"""
+def fetch_recent_weather(lat: float, lon: float, city_name: str, location_id: int, region: str) -> pd.DataFrame:
+    """Получаем данные только за последний час по одному городу"""
     url = "https://archive-api.open-meteo.com/v1/archive"
-    
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     params = {
         "latitude": lat,
@@ -29,11 +22,11 @@ def fetch_recent_weather(lat: float, lon: float, location_name: str) -> pd.DataF
         "start_hour": (now - timedelta(hours=2)).strftime("%Y-%m-%dT%H:00"),
         "end_hour": now.strftime("%Y-%m-%dT%H:00"),
         "hourly": VARIABLES,
-        "timezone": "UTC"                    
+        "timezone": "UTC"
     }
 
-    openmeteo = openmeteo_requests.Client()
-    responses = openmeteo.weather_api(url, params=params)
+    client = openmeteo_requests.Client()
+    responses = client.weather_api(url, params=params)
     response = responses[0]
     hourly = response.Hourly()
 
@@ -47,59 +40,70 @@ def fetch_recent_weather(lat: float, lon: float, location_name: str) -> pd.DataF
     data = {"time": times}
     for i, var in enumerate(VARIABLES):
         data[var] = hourly.Variables(i).ValuesAsNumpy()
-    df = pd.DataFrame(data)
-    df = df.tail(1).reset_index(drop=True)
 
-    df["location_name"] = location_name
-    df["ingested_at"] = datetime.utcnow()
+    df = pd.DataFrame(data)
+    df = df.tail(1).reset_index(drop=True)  
+
+    df["location_id"] = location_id
+    df["city"] = city_name
+    df["region"] = region
+    df["ingested_at"] = now
+
     return df
 
+@task
+def get_active_locations() -> list[dict]:
+    """Загружаем список активных городов"""
+    df = pd.read_csv("/opt/airflow/dags/location/towns.csv")
+    df = df[['place_id', 'city', 'region_name', 'lat', 'lon']]
+    return df.to_dict(orient="records")
 
-def weather_resource():
-    """Генератор для dlt"""
-    for loc in LOCATIONS:
-        df = fetch_recent_weather(loc["lat"], loc["lon"], loc["name"])
-        yield df
-
-def run_dlt_pipeline():
-    """Основная функция"""
-    pipeline = dlt.pipeline(
-        pipeline_name="open_meteo_actual_hourly",
-        destination="filesystem",
-        dataset_name="actual_data",
+@task
+def fetch_and_load_weather(location: dict):
+    """Задача на один город: забирает данные и сразу грузит в Iceberg"""
+    df = fetch_recent_weather(
+        lat=location["lat"],
+        lon=location["lon"],
+        city_name=location["city"],
+        location_id=location["place_id"],
+        region=location["region_name"]
     )
 
-    pipeline.run(
-        weather_resource(),
+    if df.empty:
+        print(f"Нет данных для города {location['city']}")
+        return
+
+    pipeline = dlt.pipeline(
+        pipeline_name="open_meteo_russia_hourly",
+        destination="filesystem",
+        dataset_name="actual_data",          
+    )
+
+    pipeline.run(df,
+        table_name="hourly_weather",
         loader_file_format="parquet",
         table_format="iceberg",
-        table_name="hourly_weather"
+        write_disposition="append"
     )
-    
-    print("✅ Hourly weather update completed successfully!")
 
+    print(f"✅ Загружено: {location['city']} ({location['region_name']})")
 
-# ====================== DAG =========================
-default_args = {
-    'owner': 'airflow',
-    'depends_on_past': False,
-    'retry_delay': timedelta(minutes=5),
-    'retries': 3,
-}
-
-dag = DAG(
+@dag(
     dag_id="open_meteo_actual_hourly",
-    default_args=default_args,
-    description="Ежечасная загрузка фактической погоды (только последний час)",
+    description="Ежечасная загрузка фактической погоды по всем городам России (последний час)",
     schedule="0 * * * *",
     start_date=datetime(2026, 1, 1),
     catchup=False,
-    tags=["weather", "open-meteo", "dlt"],
-    is_paused_upon_creation=False,
+    tags=["weather", "open-meteo", "dlt", "russia"],
+    max_active_runs=1,
+    default_args={
+        "owner": "airflow",
+        "retries": 2,
+        "retry_delay": timedelta(minutes=5),
+    },
 )
+def open_meteo_actual_hourly_dag():
+    locations = get_active_locations()
+    fetch_and_load_weather.expand(location=locations)
 
-ingest_weather_actual = PythonOperator(
-    task_id="ingest_weather_actual",
-    python_callable=run_dlt_pipeline,
-    dag=dag,
-)
+open_meteo_actual_hourly_dag()
