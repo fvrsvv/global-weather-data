@@ -12,4 +12,5 @@ dlt[parquet]
 dlt[pyiceberg]
 dlt[filesystem,s3] 
 
-dbt
+dbt-core
+dbt-clickhouse

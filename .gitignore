@@ -9,3 +9,5 @@
 dbt.log
 
 secrets.toml
+
+.vscode
