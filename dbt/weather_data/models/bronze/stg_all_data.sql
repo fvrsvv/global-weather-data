@@ -1,5 +1,5 @@
 {{ config(
-    materialized = 'view',
+    materialized = 'table',
     alias = 'stg_all_data'
 ) }}
 

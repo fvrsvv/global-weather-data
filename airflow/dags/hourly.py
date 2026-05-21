@@ -8,15 +8,12 @@ import openmeteo_requests
 from airflow.sdk import dag, task
 
 
-VARIABLES = [
-    "temperature_2m", "apparent_temperature", "precipitation", "weather_code",
-    "relative_humidity_2m", "wind_speed_10m", "wind_direction_10m",
-    "cloud_cover", "surface_pressure", "et0_fao_evapotranspiration"
-]
+VARIABLES = ["temperature_2m", "relative_humidity_2m", "apparent_temperature", "precipitation", 
+            "rain", "snowfall", "snow_depth", "weather_code"]
 
 
 def fetch_batch_weather(batch: list[dict]) -> pd.DataFrame | None:
-    """Один multi-location запрос"""
+    """Fetch weather data for a batch of locations and transform to DataFrame"""
     if not batch:
         return None
 
@@ -36,7 +33,7 @@ def fetch_batch_weather(batch: list[dict]) -> pd.DataFrame | None:
         }
 
         client = openmeteo_requests.Client()
-        responses = client.weather_api("http://localhost:8080/v1/archive", params=params)
+        responses = client.weather_api("http://172.19.0.1:8085/v1/archive", params=params)
 
         all_dfs = []
         for i, response in enumerate(responses):
@@ -66,7 +63,7 @@ def fetch_batch_weather(batch: list[dict]) -> pd.DataFrame | None:
         return pd.concat(all_dfs, ignore_index=True)
 
     except Exception as e:
-        print(f"❌ Ошибка батча ({len(batch)} городов): {e}")
+        print(f"❌ Error batch ({len(batch)} cities): {e}")
         return None
 
 
@@ -76,9 +73,9 @@ def fetch_all_weather():
     df_locations = df_locations[['place_id', 'city', 'region_name', 'lat', 'lon']]
     locations = df_locations.to_dict(orient="records")
 
-    print(f"Всего городов: {len(locations)}")
+    print(f"Total cities: {len(locations)}")
 
-    batch_size = 40                  
+    batch_size = 100                  
     results = []
     total_success = 0
     start_time = time.time()
@@ -86,7 +83,7 @@ def fetch_all_weather():
     for i in range(0, len(locations), batch_size):
         batch = locations[i:i + batch_size]
         batch_num = i // batch_size + 1
-        print(f"Запрос батча {batch_num} ({len(batch)} городов)...")
+        print(f"Fetching batch {batch_num} ({len(batch)} cities)...")
 
         df_batch = fetch_batch_weather(batch)
 
@@ -95,15 +92,15 @@ def fetch_all_weather():
             total_success += len(batch)
 
         elapsed = time.time() - start_time
-        if elapsed < 110:
-            sleep_time = random.uniform(3.8, 5.2)  
-            time.sleep(sleep_time)
+        # if elapsed < 110:
+        #     sleep_time = random.uniform(1.8, 3.2)  
+        #     time.sleep(sleep_time)
 
     total_time = time.time() - start_time
-    print(f"Обработка завершена за {total_time:.1f} секунд")
+    print(f"Processing completed in {total_time:.1f} seconds")
 
     if not results:
-        print("Нет данных для загрузки")
+        print("No data to upload")
         return
 
     final_df = pd.concat(results, ignore_index=True)
@@ -122,12 +119,12 @@ def fetch_all_weather():
         write_disposition="append"
     )
 
-    print(f"✅ Загружено: {len(final_df)} записей из {total_success} городов")
+    print(f"✅ Uploaded: {len(final_df)} records from {total_success} cities")
 
 
 @dag(
     dag_id="open_meteo_actual_hourly",
-    description="Multi-location + контролируемый темп (за ~2 минуты)",
+    description="Fetch hourly weather data for Russian cities from local Open-Meteo server and upload to DLT pipeline",
     schedule="0 * * * *",
     start_date=datetime(2026, 1, 1),
     catchup=False,
