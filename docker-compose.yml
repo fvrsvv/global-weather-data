@@ -279,6 +279,35 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+  
+  # local weather data source 
+  open-meteo:
+    image: ghcr.io/open-meteo/open-meteo:latest
+    container_name: open-meteo
+    ports:
+      - "8085:8080"     
+    volumes:
+      - open-meteo-data:/app/data
+    command: serve
+    restart: unless-stopped
+    networks:
+      - airflow_default
+
+  # local weather data sync service
+  open-meteo-sync:
+    image: ghcr.io/open-meteo/open-meteo:latest
+    container_name: open-meteo-sync
+    volumes:
+      - open-meteo-data:/app/data
+    command: sync dwd_icon temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,snowfall,snow_depth,weather_code,wind_speed_10m,wind_direction_10m --past-days 1 --repeat-interval 30
+    restart: unless-stopped
+    networks:
+      - airflow_default
     
 volumes:
   postgres-db-volume:
+  open-meteo-data:
+
+networks:
+  airflow_default:
+    # external: true
