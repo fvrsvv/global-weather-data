@@ -3,7 +3,6 @@
     unique_key = ['time', 'location_id'],    
     incremental_strategy = 'append',         
     on_schema_change = 'append_new_columns',
-    partition_by = 'toDate(time)',
     alias = 'stg_all_data'
 ) }}
 

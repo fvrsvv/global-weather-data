@@ -19,8 +19,20 @@
 
 **Архитектура проекта (Medalion)**
 Bronze → dlt загружает сырые Parquet в Yandex Object Storage (table format iceberg)
-Silver → dbt или Python task в Airflow 
-Gold → dbt-модели в DWH (аналитические витрины)
+Silver → dbt 
+Gold → dbt-модели в DWH
 Incremental loads каждый день 
+
+---
+
+**Настройка Metabase (http://localhost:3000)**
+1. Database type: ClickHouse
+2. Name: ClickHouse 
+3. Host: clickhouse
+4. Port: 8123
+5. Username: clickhouse.username (.env)
+6. Password: clickhouse.password (.env)
+
+---
 
 https://github.com/fvrsvv/global-weather-data

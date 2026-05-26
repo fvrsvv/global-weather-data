@@ -50,7 +50,7 @@ def fetch_batch_weather(batch: list[dict], days_back: int = 7) -> pd.DataFrame |
         }
 
         client = openmeteo_requests.Client()
-        responses = client.weather_api("http://172.19.0.1:8085/v1/archive", params=params)
+        responses = client.weather_api("http://open-meteo:8080/v1/archive", params=params)
 
         all_dfs = []
         for i, response in enumerate(responses):

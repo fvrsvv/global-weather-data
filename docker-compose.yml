@@ -56,6 +56,8 @@ services:
       retries: 5
       start_period: 5s
     restart: always
+    networks:
+      - airflow_default
 
   redis:
     # Redis is limited to 7.2-bookworm due to licencing change
@@ -70,6 +72,8 @@ services:
       retries: 50
       start_period: 30s
     restart: always
+    networks:
+      - airflow_default
 
   airflow-apiserver:
     <<: *airflow-common
@@ -87,6 +91,8 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
+    networks:
+      - airflow_default
 
   airflow-scheduler:
     <<: *airflow-common
@@ -102,6 +108,8 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
+    networks:
+      - airflow_default
 
   airflow-dag-processor:
     <<: *airflow-common
@@ -117,6 +125,8 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
+    networks:
+      - airflow_default
 
   airflow-worker:
     <<: *airflow-common
@@ -140,6 +150,8 @@ services:
         condition: service_healthy
       airflow-init:
         condition: service_completed_successfully
+    networks:
+      - airflow_default
 
   airflow-triggerer:
     <<: *airflow-common
@@ -155,6 +167,8 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
+    networks:
+      - airflow_default
 
   airflow-init:
     <<: *airflow-common
@@ -262,6 +276,8 @@ services:
       - airflow
     depends_on:
       <<: *airflow-common-depends-on
+    networks:
+      - airflow_default
 
   # Clickhouse DWH
   clickhouse:
@@ -279,6 +295,8 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+    networks:
+      - airflow_default
   
   # local weather data source 
   open-meteo:
@@ -304,6 +322,31 @@ services:
     networks:
       - airflow_default
     
+    # visualisation
+  metabase:
+    image: metabase/metabase:latest
+    container_name: metabase
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # - metabase_data:/metabase-data
+      - ./metabase/plugins:/plugins
+    depends_on:
+      - clickhouse
+    command: >
+      bash -c "
+        /app/metabase-init.sh &
+        /app/run_metabase.sh
+      "
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+    networks:
+      - airflow_default
+  
 volumes:
   postgres-db-volume:
   open-meteo-data:
