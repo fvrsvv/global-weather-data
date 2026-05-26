@@ -1,35 +1,52 @@
 from datetime import datetime, timedelta, timezone
 import pandas as pd
 import time
-import random
 import dlt
 import openmeteo_requests
 
 from airflow.sdk import dag, task
 
 
-VARIABLES = ["temperature_2m", "relative_humidity_2m", "apparent_temperature", "precipitation", 
-            "rain", "snowfall", "snow_depth", "weather_code"]
+VARIABLES = [
+    "temperature_2m",
+    "relative_humidity_2m",
+    "dew_point_2m",
+    "precipitation",
+    "rain",
+    "snowfall",
+    "snow_depth",
+    "weather_code",
+    "wind_u_component_10m",
+    "wind_v_component_10m",
+    "wind_gusts_10m",
+    "pressure_msl",
+    "cloud_cover",
+    "cloud_cover_low",
+    "cloud_cover_mid",
+    "cloud_cover_high"
+]
 
-
-def fetch_batch_weather(batch: list[dict]) -> pd.DataFrame | None:
-    """Fetch weather data for a batch of locations and transform to DataFrame"""
+def fetch_batch_weather(batch: list[dict], days_back: int = 7) -> pd.DataFrame | None:
+    """Fetch historical weather data for a batch of locations"""
     if not batch:
         return None
 
     try:
         now = datetime.now(timezone.utc)
-        
+        start_date = (now - timedelta(days=days_back)).strftime("%Y-%m-%d")
+        end_date = now.strftime("%Y-%m-%d")
+
         latitudes = [loc["lat"] for loc in batch]
         longitudes = [loc["lon"] for loc in batch]
 
         params = {
             "latitude": latitudes,
             "longitude": longitudes,
-            "start_hour": (now - timedelta(hours=2)).strftime("%Y-%m-%dT%H:00"),
-            "end_hour": now.strftime("%Y-%m-%dT%H:00"),
-            "hourly": VARIABLES,
-            "timezone": "UTC"
+            "start_date": start_date,
+            "end_date": end_date,
+            "hourly": ",".join(VARIABLES),
+            "timezone": "UTC",
+            "models": "dwd_icon"          
         }
 
         client = openmeteo_requests.Client()
@@ -51,7 +68,7 @@ def fetch_batch_weather(batch: list[dict]) -> pd.DataFrame | None:
             for j, var in enumerate(VARIABLES):
                 data[var] = hourly.Variables(j).ValuesAsNumpy()
 
-            df = pd.DataFrame(data).tail(1).reset_index(drop=True)
+            df = pd.DataFrame(data)
 
             df["location_id"] = loc["place_id"]
             df["city"] = loc["city"]
@@ -67,7 +84,7 @@ def fetch_batch_weather(batch: list[dict]) -> pd.DataFrame | None:
         return None
 
 
-@task(retries=3, retry_delay=timedelta(minutes=1))
+@task(retries=3, retry_delay=timedelta(minutes=2))
 def fetch_all_weather():
     df_locations = pd.read_csv("/opt/airflow/dags/location/towns.csv")
     df_locations = df_locations[['place_id', 'city', 'region_name', 'lat', 'lon']]
@@ -75,26 +92,23 @@ def fetch_all_weather():
 
     print(f"Total cities: {len(locations)}")
 
-    batch_size = 100                  
+    batch_size = 100       
     results = []
     total_success = 0
     start_time = time.time()
 
+    DAYS_BACK = 1                   
+
     for i in range(0, len(locations), batch_size):
         batch = locations[i:i + batch_size]
         batch_num = i // batch_size + 1
-        print(f"Fetching batch {batch_num} ({len(batch)} cities)...")
+        print(f"Fetching batch {batch_num} ({len(batch)} cities) | Period: {DAYS_BACK} days...")
 
-        df_batch = fetch_batch_weather(batch)
+        df_batch = fetch_batch_weather(batch, days_back=DAYS_BACK)
 
         if df_batch is not None and not df_batch.empty:
             results.append(df_batch)
             total_success += len(batch)
-
-        elapsed = time.time() - start_time
-        # if elapsed < 110:
-        #     sleep_time = random.uniform(1.8, 3.2)  
-        #     time.sleep(sleep_time)
 
     total_time = time.time() - start_time
     print(f"Processing completed in {total_time:.1f} seconds")
@@ -104,6 +118,7 @@ def fetch_all_weather():
         return
 
     final_df = pd.concat(results, ignore_index=True)
+    print(f"Total records: {len(final_df)}")
 
     pipeline = dlt.pipeline(
         pipeline_name="open_meteo_russia_hourly",
@@ -124,8 +139,8 @@ def fetch_all_weather():
 
 @dag(
     dag_id="open_meteo_actual_hourly",
-    description="Fetch hourly weather data for Russian cities from local Open-Meteo server and upload to DLT pipeline",
-    schedule="0 * * * *",
+    description="Fetch historical weather data from local Open-Meteo (DWD_ICON)",
+    schedule="0 */3 * * *",           
     start_date=datetime(2026, 1, 1),
     catchup=False,
     tags=["weather", "open-meteo"],
